@@ -1,0 +1,214 @@
+#!/bin/bash
+#
+# imgupd -- image updater script
+#
+
+usage ()
+{
+  echo ""
+  echo "Usage: imgupd <command> [...]"
+  echo ""
+  echo "  Commands:"
+  echo "    show [<archive>]"
+  echo "      Shows current firmware versions."
+  echo "    install <item> [<archive>]"
+  echo "      Install item from archive."
+  echo ""
+  echo "  If no <archive> specified then current directory is searched."
+  echo '  Archive name must be of the form "*.imgupd.tar".'
+  echo ""
+  exit 1
+}
+
+find_archive()
+{
+  # was archive name given?
+  if [ ! -z "$1" ]; then
+    # check if it exists
+    if [ -f "$1" ]; then
+      ARCHIVE=$1
+      echoerr "Using specified archive: $ARCHIVE"
+      return 0
+    else
+      echoerr "ERROR: Specified archive does not exist."
+      return 1
+    fi
+  fi
+
+  # is there an archive in current directory?
+  ARCHIVE=$(ls -1 *.img.tar | head -n 1)
+  if [ ! -z $ARCHIVE ]; then
+    echoerr "Found archive: $ARCHIVE"
+    return 0
+  fi
+
+  echoerr "ERROR: No archive found."
+  return 1
+}
+
+echoerr () { echo "$@" 1>&2; }
+
+load_infofile()
+{
+    # get item name (string before first period)
+    ITEM=$(echo $infofile | sed -r 's/^([^.]*).*/\1/')
+
+    # load variables from infofile
+    TARGET=""
+    VERSION=""
+    METHOD=""
+    DATE=""
+    # note: infofile may override ITEM
+    eval $(tar xf $ARCHIVE --to-stdout $infofile 2>/dev/null)
+}
+
+verify_target()
+{
+  if [ -b $target ]; then
+    if [[ ! $MOUNTED_DEVS =~ $target ]]; then
+      _TARGET=$target
+      return 0
+    else
+      echoerr "  Target '$target' already mounted."
+    fi
+  else
+    echoerr "  WARNING: Target '$target' not found."
+  fi
+  return 1
+}
+
+find_target()
+{
+  # find target block device
+  _TARGET=""
+  for target in $(echo $TARGET | tr ";" "\n")
+  do
+    if verify_target; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+
+show ()
+{
+  echo
+  echo "Current Root Version:"
+  infofile="/INFO"
+  load_infofile
+  if [ -z $VERSION ]; then
+    echo "  WARNING: No root info file."
+  else
+    echo "  $ITEM $VERSION $DATE"
+  fi
+  echo 
+  
+  if ! find_archive $1; then
+    # no archive found
+    return 1
+  fi
+  echo
+ 
+  # get all currently mounted devices
+  MOUNTED_DEVS=$(mount | awk '{print $1}')
+
+  # go through all info files
+  for infofile in $(tar -tf $ARCHIVE | grep -e '.info$')
+  do
+
+    load_infofile
+    echo "$ITEM $VERSION $DATE"
+
+    if ! find_target;  then
+      echoerr "  No target device."
+      echo
+      continue
+    fi
+
+    echo "  Would install to: $_TARGET"
+    echo
+
+  done
+
+}
+
+install()
+{
+  if [ -z $1 ]; then
+    echo "Please specify item to install."
+    return 1
+  fi
+
+  echo
+  if ! find_archive $2; then
+    # no archive found
+    return 1
+  fi
+
+  # get all currently mounted devices
+  MOUNTED_DEVS=$(mount | awk '{print $1}')
+
+  # go through all info files
+  TAR_CONTENTS=$(tar -tf $ARCHIVE)
+  INFO_FILES=$(tar -tf $ARCHIVE | grep -e '.info$')
+  _IMG=""
+  for infofile in $INFO_FILES
+  do
+    load_infofile
+    if [ "$ITEM" == "$1" ]; then
+      _IMG="$(echo $infofile | sed -r 's/([^.]*).info$/\1/').bz2"
+      echo "Found item $ITEM"
+      break
+    fi
+  done
+
+  if [ -z $_IMG ]; then
+    echoerr "Item not found."
+    return 1
+  fi
+
+  if [[ ! $TAR_CONTENTS =~ $_IMG ]]; then
+    echoerr "ERROR: Image file not found: '$_IMG'"
+    return 1
+  fi
+
+  if [ ! $METHOD == "fs" ]; then
+    echo "Unknown method '$METHOD'"
+    return 1
+  fi
+
+  if ! find_target; then
+    echoerr "ERROR: No target found."
+    return 1
+  fi
+
+  echo "Installing $_IMG to $_TARGET..."
+  bunzip2 --stdout $_IMG | dd of="$_TARGET"
+  if [ $? -ne 0 ]; then
+    echo "ERROR: Install failed."
+    return 1
+  fi
+  sync
+  echo "Success!"
+
+  #TODO flag target to boot!
+
+}
+
+# entry point
+case $1 in
+  "show" )
+    shift
+    show "$@"
+    ;;
+  "install" )
+    shift
+    install "$@"
+    ;;
+  * )
+    usage ;;
+esac
+
+exit 0
+
