@@ -1,0 +1,76 @@
+#!/bin/bash
+#
+# imgmount -- mount disk image on loopback device
+#
+# WARNING: Do not run multiple instances of this script at once!
+# 
+
+usage ()
+{
+  echo ""
+  echo "Usage: imgmount [OPTION] <img-file>"
+  echo ""
+  echo "  Options:"
+  echo "    -u   unmount"
+  echo "    -r   unmount (if needed) then remount"
+  echo "    -h   this help"
+  echo ""
+  exit 1
+}
+
+# parse arguments
+case $1 in
+  "-u" )
+    UNMOUNT=1
+    shift
+    ;;
+  "-r" )
+    UNMOUNT=1
+    MOUNT=1
+    shift
+    ;;
+  "-h" )
+    usage ;;
+  "" )
+    usage ;;
+  * )
+    MOUNT=1
+    ;;
+esac
+IMGFILE=$1
+
+# check if image already mounted
+LOOPS=$(losetup -j $IMGFILE | sed -r 's/^([^:]*):.*/\1/')
+for loop in $LOOPS; do
+  if [ ! -z $UNMOUNT ]; then
+    losetup -d $loop
+    echo "Unmounted from $loop"
+    UNMOUNT_FLAG=1
+  else
+    echo "Image already mounted."
+    exit 1
+  fi
+done
+
+# end here if we are not mounting
+if [ -z $MOUNT ]; then
+  if [ -z $UNMOUNT_FLAG ]; then
+    echo "Image not mounted."
+    exit 1
+  else
+    exit 0
+  fi
+fi
+
+# mount
+LOOP=$(losetup -f --show $IMGFILE)
+if [ $? -eq 0 ]; then
+  echo "Mounted on $LOOP"
+  exit 0
+else
+  echo "Mount failed."
+  exit 1
+fi
+
+
+
