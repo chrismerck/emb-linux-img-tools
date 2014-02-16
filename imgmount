@@ -99,11 +99,15 @@ if [ $? -eq 0 ]; then
     mount "/dev/mapper/$part" $MOUNTPOINT 2> /dev/null
     if [ $? -eq 0 ]; then
       echo "Partition $part mounted at $MOUNTPOINT"
+      MOUNTED_SOMETHING=1
     else
+      echo "Unrecognized partition attached to /dev/mapper/$part"
       rmdir $MOUNTPOINT # cleanup unneeded dir
     fi
   done
-  df -h | egrep "Filesystem|$BARE_LOOP"
+  if [ ! -z $MOUNTED_SOMETHING ]; then
+    df -h | egrep "Filesystem|$BARE_LOOP"
+  fi
   exit 0
 else
   echo "Mount failed."
