@@ -43,8 +43,18 @@ IMGFILE=$1
 LOOPS=$(losetup -j $IMGFILE | sed -r 's/^([^:]*):.*/\1/')
 for loop in $LOOPS; do
   if [ ! -z $UNMOUNT ]; then
+    MNT_PREFIX="/mnt/$(echo $loop | sed -r 's/\/dev\///')"
+    umount "$MNT_PREFIX"   2> /dev/null   # if raw partition 
+    umount "$MNT_PREFIX"p* 2> /dev/null   # if disk with multiple partitions
+    rmdir $MNT_PREFIX 2> /dev/null # remove old mount points
+    rmdir $MNT_PREFIX* 2> /dev/null
+    kpartx -v -s -d $loop > /dev/null
     losetup -d $loop
-    echo "Unmounted from $loop"
+    if [ $? -eq 0 ]; then
+      echo "Detached from $loop"
+    else
+      echo "Failed to detach from $loop"
+    fi
     UNMOUNT_FLAG=1
   else
     echo "Image already mounted."
@@ -65,7 +75,30 @@ fi
 # mount
 LOOP=$(losetup -f --show $IMGFILE)
 if [ $? -eq 0 ]; then
-  echo "Mounted on $LOOP"
+  echo "Attached to $LOOP"
+  # try to mount whole image
+  BARE_LOOP=$(echo $LOOP | sed -r 's/\/dev\///')
+  MNT_PREFIX=/mnt/$BARE_LOOP
+  mkdir -p $MNT_PREFIX
+  mount $LOOP $MNT_PREFIX 2> /dev/null
+  if [ $? -eq 0 ]; then
+    echo "Mounted whole image at $MNT_PREFIX"
+  else
+    rmdir $MNT_PREFIX # cleanup unneeded dir
+  fi
+  # mount each partition
+  PARTS=$(kpartx -v -s -a $LOOP | grep 'add map' | awk {'print $3'})
+  for part in $PARTS; do
+    MOUNTPOINT="/mnt/$part"
+    mkdir -p $MOUNTPOINT
+    mount "/dev/mapper/$part" $MOUNTPOINT 2> /dev/null
+    if [ $? -eq 0 ]; then
+      echo "Partition $part mounted at $MOUNTPOINT"
+    else
+      rmdir $MOUNTPOINT # cleanup unneeded dir
+    fi
+  done
+  df -h | egrep "Filesystem|$BARE_LOOP"
   exit 0
 else
   echo "Mount failed."
