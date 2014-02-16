@@ -1,0 +1,87 @@
+#!/bin/bash
+#
+# imgpatch - patch an image with a tarball
+#
+# useful for installing applications to a platform image
+#
+
+PATH=$PATH:.
+
+usage ()
+{
+  echo ""
+  echo "Usage: imgpatch <tarball> <img> [<partition-number>]"
+  echo ""
+#  echo "  Options:"
+#  echo "    None"
+#  echo ""
+  exit 1
+}
+
+# verify arguments
+
+if [ $# -lt 2 ]; then
+  usage
+fi
+
+TARBALL=$1
+IMGFILE=$2
+PARTNO=$3
+
+if [ ! -f $TARBALL ]; then
+  echo "Tarball not found: $TARBALL"
+  exit 1
+fi
+
+if [ ! -f $IMGFILE ]; then
+  echo "Image file not found: $IMGFILE"
+  exit 1
+fi
+
+
+
+cleanup_and_exit ()
+{
+  sync
+  imgmount -u $IMGFILE  > /dev/null
+  if [ $? -ne 0 ]; then
+    echo "WARNING: Failed to properly unmount image."
+  fi
+  if [ $1 -eq 0 ]; then
+    echo "Success!"
+  fi
+  exit $1
+}
+
+
+
+# mount the image file
+echo
+OUT=$(imgmount -r $IMGFILE)
+if [ $? -ne 0 ]; then
+  echo "Failed to mount image file."
+  exit 1
+fi
+BARE_LOOP=$(echo $OUT | sed -r 's/.*Attached to \/dev\/(loop.).*/\1/')
+if [ -z $PARTNO ]; then
+  DEST=/mnt/$BARE_LOOP
+else
+  DEST=/mnt/"$BARE_LOOP"p$PARTNO
+fi
+if [ ! -d $DEST ]; then
+  echo "Destination directory not found: $DEST"
+  cleanup_and_exit 1
+fi
+
+
+# extract tarball into partition
+
+WD=`pwd`
+cd $DEST
+echo "Installing tarball..."
+tar xvf $WD/$TARBALL 
+echo 
+cd $WD
+cleanup_and_exit $?
+
+

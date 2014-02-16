@@ -5,7 +5,7 @@ Embedded Linux Image Tools
 
 * imgupd - firmware update script 
 * imgmount - mount a disk image 
-* appinstall - install application to platform image
+* imgpatch - install application to platform image
 
 For testing with loop block devices: 
 http://bochs.sourceforge.net/doc/docbook/user/loop-device-usage.html
@@ -16,7 +16,14 @@ http://squashfs.sourceforge.net/
 We will want to read the uboot version:
 http://stackoverflow.com/questions/5781738/getting-u-boots-version-from-userspace
 
-Testing
+Todo
+----
+
+Use bsdiff or Google's courgette to make compressed updates. (Not whole image, just certain binaries?)
+
+Hash tree alongside filesystem to track changes.
+
+Examples
 -------
 
 Create empty disk:
