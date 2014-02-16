@@ -1,7 +1,11 @@
-imgupd
+emb-linux-img-tools
 ======
 
-Embedded Linux Image Updater
+Embedded Linux Image Tools
+
+* imgupd - firmware update script 
+* imgmount - mount a disk image 
+* appinstall - install application to platform image
 
 For testing with loop block devices: 
 http://bochs.sourceforge.net/doc/docbook/user/loop-device-usage.html
